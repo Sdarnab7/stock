@@ -62,14 +62,14 @@ def get_indicators(ticker: str = Query(...)):
         stoch_rsi_series = calculate_stochrsi(rsi_series)
         stoch_rsi_val = stoch_rsi_series.iloc[-1]
 
-            return {
-    "ticker": ticker,
-    "ema_20": {ticker: round(ema_20, 2)},
-    "macd": {ticker: round(macd_val, 2)},
-    "macd_signal": {ticker: round(signal_val, 2)},
-    "rsi": {ticker: round(rsi_val, 2)},
-    "stoch_rsi": {ticker: round(stoch_rsi_val, 2)},
-}
+             return {
+            "ticker": ticker,
+            "ema_20": round(ema_20, 2),
+            "macd": round(macd_val, 2),
+            "macd_signal": round(signal_val, 2),
+            "rsi": round(rsi_val, 2),
+            "stoch_rsi": round(stochrsi_val, 2)
+        }
 
 
     except Exception as e:
