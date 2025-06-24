@@ -62,7 +62,6 @@ def get_indicators(ticker: str = Query(...)):
         stoch_rsi_series = calculate_stochrsi(rsi_series)
         stoch_rsi_val = stoch_rsi_series.iloc[-1]
 
-        return {
             return {
     "ticker": ticker,
     "ema_20": {ticker: round(ema_20, 2)},
