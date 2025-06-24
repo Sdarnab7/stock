@@ -68,7 +68,7 @@ def get_indicators(ticker: str = Query(...)):
     "macd": {ticker: round(macd_val, 2)},
     "macd_signal": {ticker: round(signal_val, 2)},
     "rsi": {ticker: round(rsi_val, 2)},
-    "stoch_rsi": {ticker: round(stoch_rsi_val, 2)}
+    "stoch_rsi": {ticker: round(stoch_rsi_val, 2)},
 }
 
 
