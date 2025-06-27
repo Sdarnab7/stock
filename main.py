@@ -51,7 +51,7 @@ def get_indicators(ticker: str = Query(...)):
         ticker (str): The stock ticker symbol (e.g., "AAPL", "MSFT").
 
     Returns:
-        JSONResponse: A dictionary containing the latest indicator values or an error message.
+        JSONResponse: A dictionary containing the latest indicator values or an message.
     """
     try:
         # Download 1 month of daily data for the given ticker
@@ -107,7 +107,11 @@ def get_indicators(ticker: str = Query(...)):
 
         # Helper to safely round a float or return None if it's NaN/None
         def safe_round(value):
-            # If it's NaN from pandas/numpy, return None.
+            # If the value is a Pandas Series with a single item, extract it.
+            if isinstance(value, pd.Series) and len(value) == 1:
+                value = value.iloc[0]
+
+            # If it's NaN from pandas/numpy (or now a standard float NaN), return None.
             if pd.isna(value):
                 return None
             # Otherwise, convert to standard float and then round.
