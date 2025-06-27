@@ -27,15 +27,20 @@ def home():
     return {"message": "API is running!"}
 
 # Helper function to safely convert a pandas Series to a list,
-# replacing NaN values with None. This ensures JSON compatibility.
+# replacing NaN values with None and ensuring standard Python floats.
 def _safe_list(series: pd.Series):
     """
     Converts a pandas Series to a list, replacing any NaN values with None.
-    This is crucial for JSON serialization as NaN is not a valid JSON type.
+    Also ensures numeric values are standard Python floats for JSON compatibility.
     """
-    # Use .where() to replace NaN with None, then convert to list.
-    # .astype(object) ensures that the Series can hold None along with numbers.
-    return series.where(pd.notna(series), None).tolist()
+    cleaned_list = []
+    for x in series:
+        if pd.isna(x): # Check for NaN or None (including numpy NaNs)
+            cleaned_list.append(None)
+        else:
+            # Explicitly convert to standard Python float before rounding
+            cleaned_list.append(round(float(x), 2))
+    return cleaned_list
 
 @app.get("/indicators")
 def get_indicators(ticker: str = Query(...)):
@@ -102,8 +107,11 @@ def get_indicators(ticker: str = Query(...)):
 
         # Helper to safely round a float or return None if it's NaN/None
         def safe_round(value):
-            # Using pd.isna() for robust NaN check across different numeric types
-            return None if pd.isna(value) else round(value, 2)
+            # If it's NaN from pandas/numpy, return None.
+            if pd.isna(value):
+                return None
+            # Otherwise, convert to standard float and then round.
+            return round(float(value), 2)
 
         result = {
             "ticker": ticker.upper(),
@@ -256,3 +264,4 @@ def get_combined_chart_url(ticker: str = Query(...)):
         traceback.print_exc()
         # Return a more specific error message to the client
         return JSONResponse(status_code=500, content={"error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}. Please check the server logs for more details."})
+
