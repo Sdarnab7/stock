@@ -102,7 +102,8 @@ def get_indicators(ticker: str = Query(...)):
 
         # Helper to safely round a float or return None if it's NaN/None
         def safe_round(value):
-            return None if (value is None or (isinstance(value, float) and math.isnan(value))) else round(value, 2)
+            # Using pd.isna() for robust NaN check across different numeric types
+            return None if pd.isna(value) else round(value, 2)
 
         result = {
             "ticker": ticker.upper(),
@@ -255,4 +256,3 @@ def get_combined_chart_url(ticker: str = Query(...)):
         traceback.print_exc()
         # Return a more specific error message to the client
         return JSONResponse(status_code=500, content={"error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}. Please check the server logs for more details."})
-
