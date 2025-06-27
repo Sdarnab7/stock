@@ -65,7 +65,7 @@ def get_indicators(ticker: str = Query(...)):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
-        @app.get("/timeseries")
+@app.get("/timeseries")
 def get_timeseries(ticker: str = Query(...)):
     try:
         data = yf.download(ticker, period="1mo", interval="1d")
