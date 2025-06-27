@@ -7,6 +7,7 @@ import math
 import urllib.parse
 import json
 import numpy as np # Import numpy for NaN handling
+import traceback # Import traceback for detailed error logging
 
 app = FastAPI()
 
@@ -115,8 +116,10 @@ def get_indicators(ticker: str = Query(...)):
         return result
 
     except Exception as e:
-        # Catch any other unexpected errors and return a 500 status code
-        return JSONResponse(status_code=500, content={"error": f"An error occurred while processing your request: {str(e)}"})
+        # Log the full traceback for debugging in the server logs
+        traceback.print_exc()
+        # Return a more specific error message to the client
+        return JSONResponse(status_code=500, content={"error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}. Please check the server logs for more details."})
 
 @app.get("/timeseries")
 def get_timeseries(ticker: str = Query(...)):
@@ -174,7 +177,10 @@ def get_timeseries(ticker: str = Query(...)):
         }
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        # Log the full traceback for debugging in the server logs
+        traceback.print_exc()
+        # Return a more specific error message to the client
+        return JSONResponse(status_code=500, content={"error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}. Please check the server logs for more details."})
 
 @app.get("/chart")
 def get_combined_chart_url(ticker: str = Query(...)):
@@ -245,7 +251,8 @@ def get_combined_chart_url(ticker: str = Query(...)):
         return {"chart_url": url}
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-
+        # Log the full traceback for debugging in the server logs
+        traceback.print_exc()
+        # Return a more specific error message to the client
+        return JSONResponse(status_code=500, content={"error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}. Please check the server logs for more details."})
 
