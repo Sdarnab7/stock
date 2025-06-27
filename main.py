@@ -4,6 +4,9 @@ from fastapi.responses import JSONResponse
 import yfinance as yf
 import pandas as pd
 import math
+import urllib.parse
+import json
+
 
 app = FastAPI()
 
