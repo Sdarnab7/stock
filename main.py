@@ -32,14 +32,20 @@ def _safe_list(series: pd.Series):
     """
     Converts a pandas Series to a list, replacing any NaN values with None.
     Also ensures numeric values are standard Python floats for JSON compatibility.
+    Includes robust error handling for non-float convertible values.
     """
     cleaned_list = []
     for x in series:
-        if pd.isna(x): # Check for NaN or None (including numpy NaNs)
-            cleaned_list.append(None)
-        else:
-            # Explicitly convert to standard Python float before rounding
-            cleaned_list.append(round(float(x), 2))
+        try:
+            # Attempt to convert to standard Python float.
+            # This will raise ValueError or TypeError if x is not convertible (e.g., a string).
+            float_x = float(x)
+            if pd.isna(float_x): # Check if the converted float is NaN
+                cleaned_list.append(None)
+            else:
+                cleaned_list.append(round(float_x, 2))
+        except (ValueError, TypeError): # Catch errors if conversion to float fails (e.g., x is a string)
+            cleaned_list.append(None) # Treat non-convertible values as missing data
     return cleaned_list
 
 @app.get("/indicators")
@@ -111,11 +117,15 @@ def get_indicators(ticker: str = Query(...)):
             if isinstance(value, pd.Series) and len(value) == 1:
                 value = value.iloc[0]
 
-            # If it's NaN from pandas/numpy (or now a standard float NaN), return None.
-            if pd.isna(value):
-                return None
-            # Otherwise, convert to standard float and then round.
-            return round(float(value), 2)
+            try:
+                # Attempt to convert to standard Python float.
+                # This will raise ValueError or TypeError if value is not convertible (e.g., a string).
+                float_value = float(value)
+                if pd.isna(float_value): # Check if the converted float is NaN
+                    return None
+                return round(float_value, 2)
+            except (ValueError, TypeError): # Catch errors if conversion to float fails
+                return None # Treat non-convertible values as missing data
 
         result = {
             "ticker": ticker.upper(),
@@ -181,12 +191,12 @@ def get_timeseries(ticker: str = Query(...)):
 
         return {
             "labels": list(data.index.strftime("%Y-%m-%d")),
-            "close": _safe_list(close.round(2)), # Use helper for clean list
-            "ema_20": _safe_list(ema_20.round(2)), # Use helper for clean list
-            "macd": _safe_list(macd_line.round(2)), # Use helper for clean list
-            "macd_signal": _safe_list(macd_signal.round(2)), # Use helper for clean list
-            "rsi": _safe_list(rsi.round(2)), # Use helper for clean list
-            "stoch_rsi": _safe_list(stoch_rsi.round(2)), # Use helper for clean list
+            "close": _safe_list(close), # _safe_list handles rounding and NaNs internally
+            "ema_20": _safe_list(ema_20), # _safe_list handles rounding and NaNs internally
+            "macd": _safe_list(macd_line), # _safe_list handles rounding and NaNs internally
+            "macd_signal": _safe_list(macd_signal), # _safe_list handles rounding and NaNs internally
+            "rsi": _safe_list(rsi), # _safe_list handles rounding and NaNs internally
+            "stoch_rsi": _safe_list(stoch_rsi), # _safe_list handles rounding and NaNs internally
         }
 
     except Exception as e:
@@ -244,12 +254,12 @@ def get_combined_chart_url(ticker: str = Query(...)):
             "data": {
                 "labels": labels,
                 "datasets": [
-                    {"label": "Close", "data": _safe_list(close.round(2)), "borderColor": "blue", "fill": False},
-                    {"label": "EMA 20", "data": _safe_list(ema_20.round(2)), "borderColor": "orange", "fill": False},
-                    {"label": "MACD", "data": _safe_list(macd_line.round(2)), "borderColor": "purple", "fill": False},
-                    {"label": "MACD Signal", "data": _safe_list(macd_signal.round(2)), "borderColor": "pink", "fill": False},
-                    {"label": "RSI", "data": _safe_list(rsi.round(2)), "borderColor": "green", "fill": False},
-                    {"label": "Stoch RSI", "data": _safe_list(stoch_rsi.round(2)), "borderColor": "red", "fill": False},
+                    {"label": "Close", "data": _safe_list(close), "borderColor": "blue", "fill": False},
+                    {"label": "EMA 20", "data": _safe_list(ema_20), "borderColor": "orange", "fill": False},
+                    {"label": "MACD", "data": _safe_list(macd_line), "borderColor": "purple", "fill": False},
+                    {"label": "MACD Signal", "data": _safe_list(macd_signal), "borderColor": "pink", "fill": False},
+                    {"label": "RSI", "data": _safe_list(rsi), "borderColor": "green", "fill": False},
+                    {"label": "Stoch RSI", "data": _safe_list(stoch_rsi), "borderColor": "red", "fill": False},
                 ]
             },
             "options": {
@@ -268,4 +278,3 @@ def get_combined_chart_url(ticker: str = Query(...)):
         traceback.print_exc()
         # Return a more specific error message to the client
         return JSONResponse(status_code=500, content={"error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}. Please check the server logs for more details."})
-
