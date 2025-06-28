@@ -104,8 +104,16 @@ def get_indicators(ticker: str = Query(...)):
         max_rsi = rsi.rolling(14).max()
 
         # Handle division by zero for stoch_rsi (when max_rsi - min_rsi is 0)
-        # Add a small epsilon to denominator or check for zero difference
-        stoch_rsi = ((rsi - min_rsi) / (max_rsi - min_rsi)) * 100
+        stoch_rsi_denominator = max_rsi - min_rsi
+        stoch_rsi_numerator = rsi - min_rsi
+
+        # Conditional calculation: if denominator is zero, set stoch_rsi to 0.0, else calculate
+        stoch_rsi = pd.Series(np.where(
+            stoch_rsi_denominator == 0,
+            0.0,  # If denominator is zero, set to 0 (RSI is flat at min_rsi)
+            (stoch_rsi_numerator / stoch_rsi_denominator) * 100
+        ), index=rsi.index)
+
         # If max_rsi == min_rsi, stoch_rsi would be NaN, so we handle it gracefully.
         stoch_rsi = stoch_rsi.replace([np.inf, -np.inf], np.nan) # Replace inf with nan if any
 
@@ -113,18 +121,21 @@ def get_indicators(ticker: str = Query(...)):
 
         # Helper to safely round a float or return None if it's NaN/None
         def safe_round(value):
-            # If the value is a Pandas Series with a single item, extract it.
-            if isinstance(value, pd.Series) and len(value) == 1:
-                value = value.iloc[0]
+            # If the value is a Pandas Series, extract its scalar item.
+            if isinstance(value, pd.Series):
+                if not value.empty: # Ensure the series is not empty
+                    value = value.iloc[0] # Get the scalar item
+                else:
+                    return None # Handle empty series as None
 
             try:
-                # Attempt to convert to standard Python float.
-                # This will raise ValueError or TypeError if value is not convertible (e.g., a string).
-                float_value = float(value)
-                if pd.isna(float_value): # Check if the converted float is NaN
+                # If value is NaN from pandas/numpy (or now a standard float NaN), return None.
+                # pd.isna() reliably checks for various forms of NaN.
+                if pd.isna(value):
                     return None
-                return round(float_value, 2)
-            except (ValueError, TypeError): # Catch errors if conversion to float fails
+                # Otherwise, convert to standard Python float and then round.
+                return round(float(value), 2)
+            except (ValueError, TypeError): # Catch errors if conversion to float fails (e.g., value is a string)
                 return None # Treat non-convertible values as missing data
 
         result = {
@@ -185,7 +196,15 @@ def get_timeseries(ticker: str = Query(...)):
         # Calculate Stoch RSI
         min_rsi = rsi.rolling(14).min()
         max_rsi = rsi.rolling(14).max()
-        stoch_rsi = ((rsi - min_rsi) / (max_rsi - min_rsi)) * 100
+        
+        stoch_rsi_denominator = max_rsi - min_rsi
+        stoch_rsi_numerator = rsi - min_rsi
+
+        stoch_rsi = pd.Series(np.where(
+            stoch_rsi_denominator == 0,
+            0.0, # If denominator is zero, set to 0
+            (stoch_rsi_numerator / stoch_rsi_denominator) * 100
+        ), index=rsi.index)
         stoch_rsi = stoch_rsi.replace([np.inf, -np.inf], np.nan)
 
 
@@ -243,7 +262,15 @@ def get_combined_chart_url(ticker: str = Query(...)):
         # Stoch RSI
         min_rsi = rsi.rolling(14).min()
         max_rsi = rsi.rolling(14).max()
-        stoch_rsi = ((rsi - min_rsi) / (max_rsi - min_rsi)) * 100
+        
+        stoch_rsi_denominator = max_rsi - min_rsi
+        stoch_rsi_numerator = rsi - min_rsi
+
+        stoch_rsi = pd.Series(np.where(
+            stoch_rsi_denominator == 0,
+            0.0, # If denominator is zero, set to 0
+            (stoch_rsi_numerator / stoch_rsi_denominator) * 100
+        ), index=rsi.index)
         stoch_rsi = stoch_rsi.replace([np.inf, -np.inf], np.nan)
 
 
