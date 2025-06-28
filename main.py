@@ -60,13 +60,14 @@ def get_indicators(ticker: str = Query(...)):
         JSONResponse: A dictionary containing the latest indicator values or an message.
     """
     try:
-        # Download 1 month of daily data for the given ticker
-        data = yf.download(ticker, period="1mo", interval="1d")
+        # Download 3 months of daily data for the given ticker to ensure enough data for all indicators
+        data = yf.download(ticker, period="3mo", interval="1d")
 
         # Check if no data was returned for the ticker
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found. Please check the ticker symbol."})
 
+        # Ensure 'Close' column is a 1-dimensional Series using .squeeze()
         close = data["Close"].squeeze()
 
         # Calculate Exponential Moving Average (EMA) 20
@@ -167,11 +168,12 @@ def get_timeseries(ticker: str = Query(...)):
         JSONResponse: A dictionary containing lists of historical indicator values or an error message.
     """
     try:
-        # Download 1 month of daily data
-        data = yf.download(ticker, period="1mo", interval="1d")
+        # Download 3 months of daily data
+        data = yf.download(ticker, period="3mo", interval="1d")
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found."})
 
+        # Ensure 'Close' column is a 1-dimensional Series using .squeeze()
         close = data["Close"].squeeze()
 
         # Calculate EMA 20
@@ -237,11 +239,12 @@ def get_combined_chart_url(ticker: str = Query(...)):
         JSONResponse: A dictionary containing the chart URL or an error message.
     """
     try:
-        # Download 1 month of daily data
-        data = yf.download(ticker, period="1mo", interval="1d")
+        # Download 3 months of daily data
+        data = yf.download(ticker, period="3mo", interval="1d")
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found."})
 
+        # Ensure 'Close' column is a 1-dimensional Series using .squeeze()
         close = data["Close"].squeeze()
         ema_20 = close.ewm(span=20, adjust=False).mean()
         ema_12 = close.ewm(span=12, adjust=False).mean()
