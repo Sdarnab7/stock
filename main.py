@@ -67,7 +67,7 @@ def get_indicators(ticker: str = Query(...)):
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found. Please check the ticker symbol."})
 
-        close = data["Close"]
+        close = data["Close"].squeeze()
 
         # Calculate Exponential Moving Average (EMA) 20
         # adjust=False matches calculation methods found in many charting platforms.
@@ -172,7 +172,7 @@ def get_timeseries(ticker: str = Query(...)):
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found."})
 
-        close = data["Close"]
+        close = data["Close"].squeeze()
 
         # Calculate EMA 20
         ema_20 = close.ewm(span=20, adjust=False).mean()
@@ -242,7 +242,7 @@ def get_combined_chart_url(ticker: str = Query(...)):
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found."})
 
-        close = data["Close"]
+        close = data["Close"].squeeze()
         ema_20 = close.ewm(span=20, adjust=False).mean()
         ema_12 = close.ewm(span=12, adjust=False).mean()
         ema_26 = close.ewm(span=26, adjust=False).mean()
