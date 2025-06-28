@@ -8,6 +8,8 @@ import urllib.parse
 import json
 import numpy as np # Import numpy for NaN handling
 import traceback # Import traceback for detailed error logging
+import ta.trend # Import ta.trend for trend indicators (e.g., EMA, MACD, ADX)
+import ta.momentum # Import ta.momentum for momentum indicators (e.g., RSI)
 
 app = FastAPI()
 
@@ -57,68 +59,54 @@ def get_indicators(ticker: str = Query(...)):
         ticker (str): The stock ticker symbol (e.g., "AAPL", "MSFT").
 
     Returns:
-        JSONResponse: A dictionary containing the latest indicator values or an message.
+        JSONResponse: A dictionary containing the latest indicator values or an error message.
     """
     try:
-        # Download 3 months of daily data for the given ticker to ensure enough data for all indicators
-        data = yf.download(ticker, period="3mo", interval="1d")
+        # Download 6 months of daily data for the given ticker to ensure enough data for all indicators
+        # Increased period from 3mo to 6mo to provide even more data for indicator calculations.
+        data = yf.download(ticker, period="6mo", interval="1d")
 
         # Check if no data was returned for the ticker
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found. Please check the ticker symbol."})
 
-        # Ensure 'Close' column is a 1-dimensional Series using .squeeze()
+        # Ensure 'Close', 'High', 'Low' columns are 1-dimensional Series using .squeeze()
         close = data["Close"].squeeze()
+        high = data["High"].squeeze()
+        low = data["Low"].squeeze()
 
-        # Calculate Exponential Moving Average (EMA) 20
-        # adjust=False matches calculation methods found in many charting platforms.
-        ema_20 = close.ewm(span=20, adjust=False).mean().iloc[-1]
+        # Calculate Exponential Moving Average (EMA) 20 using ta.trend
+        # fillna=False ensures that leading NaNs (due to insufficient data) are preserved
+        ema_20 = ta.trend.ema_indicator(close, window=20, fillna=False).iloc[-1]
 
-        # Calculate MACD (Moving Average Convergence Divergence)
-        ema_12 = close.ewm(span=12, adjust=False).mean()
-        ema_26 = close.ewm(span=26, adjust=False).mean()
-        macd_line = ema_12 - ema_26
-        macd = macd_line.iloc[-1]
-        signal_line = macd_line.ewm(span=9, adjust=False).mean().iloc[-1]
+        # Calculate MACD and MACD Signal using ta.trend
+        macd_line = ta.trend.macd(close, window_fast=12, window_slow=26, fillna=False).iloc[-1]
+        macd_signal = ta.trend.macd_signal(close, window_fast=12, window_slow=26, window_sign=9, fillna=False).iloc[-1]
 
-        # Calculate Relative Strength Index (RSI)
-        delta = close.diff()
-        gain = delta.clip(lower=0) # Positive changes
-        loss = -1 * delta.clip(upper=0) # Negative changes (as positive values)
+        # Calculate Relative Strength Index (RSI) using ta.momentum
+        rsi_series = ta.momentum.rsi(close, window=14, fillna=False)
+        rsi_val = rsi_series.iloc[-1]
 
-        # Average gains and losses over 14 periods
-        avg_gain = gain.rolling(14).mean()
-        avg_loss = loss.rolling(14).mean()
+        # Calculate Stochastic RSI (maintaining original calculation logic: Stochastic of RSI)
+        min_rsi = rsi_series.rolling(14).min()
+        max_rsi = rsi_series.rolling(14).max()
 
-        # Handle division by zero for rs (when avg_loss is 0)
-        # Replace NaN in rs where avg_loss is 0 with infinity, then handle in RSI formula
-        rs = avg_gain / avg_loss
-        rs = rs.replace([np.inf, -np.inf], np.nan) # Replace inf with nan if any
-
-        # Calculate RSI: 100 - (100 / (1 + RS))
-        rsi = 100 - (100 / (1 + rs))
-        rsi_val = rsi.iloc[-1] # Get the latest RSI value
-
-        # Calculate Stochastic RSI
-        # Min and Max RSI over 14 periods
-        min_rsi = rsi.rolling(14).min()
-        max_rsi = rsi.rolling(14).max()
-
-        # Handle division by zero for stoch_rsi (when max_rsi - min_rsi is 0)
         stoch_rsi_denominator = max_rsi - min_rsi
-        stoch_rsi_numerator = rsi - min_rsi
+        stoch_rsi_numerator = rsi_series - min_rsi # Use rsi_series directly here
 
         # Conditional calculation: if denominator is zero, set stoch_rsi to 0.0, else calculate
-        stoch_rsi = pd.Series(np.where(
+        stoch_rsi_series = pd.Series(np.where(
             stoch_rsi_denominator == 0,
             0.0,  # If denominator is zero, set to 0 (RSI is flat at min_rsi)
             (stoch_rsi_numerator / stoch_rsi_denominator) * 100
-        ), index=rsi.index)
+        ), index=rsi_series.index)
+        stoch_rsi_series = stoch_rsi_series.replace([np.inf, -np.inf], np.nan) # Replace inf with nan if any
 
-        # If max_rsi == min_rsi, stoch_rsi would be NaN, so we handle it gracefully.
-        stoch_rsi = stoch_rsi.replace([np.inf, -np.inf], np.nan) # Replace inf with nan if any
+        stoch_val = stoch_rsi_series.iloc[-1] # Get the latest Stochastic RSI value
 
-        stoch_val = stoch_rsi.iloc[-1] # Get the latest Stochastic RSI value
+        # Calculate Average Directional Index (ADX) using ta.trend (new indicator)
+        adx_val = ta.trend.adx(high, low, close, window=14, fillna=False).iloc[-1]
+
 
         # Helper to safely round a float or return None if it's NaN/None
         def safe_round(value):
@@ -142,10 +130,11 @@ def get_indicators(ticker: str = Query(...)):
         result = {
             "ticker": ticker.upper(),
             "ema_20": safe_round(ema_20),
-            "macd": safe_round(macd),
-            "macd_signal": safe_round(signal_line),
+            "macd": safe_round(macd_line), # Changed from 'macd' to 'macd_line' for clarity
+            "macd_signal": safe_round(macd_signal),
             "rsi": safe_round(rsi_val),
-            "stoch_rsi": safe_round(stoch_val)
+            "stoch_rsi": safe_round(stoch_val),
+            "adx": safe_round(adx_val) # Add ADX to the result
         }
 
         return result
@@ -168,34 +157,27 @@ def get_timeseries(ticker: str = Query(...)):
         JSONResponse: A dictionary containing lists of historical indicator values or an error message.
     """
     try:
-        # Download 3 months of daily data
-        data = yf.download(ticker, period="3mo", interval="1d")
+        # Download 6 months of daily data
+        data = yf.download(ticker, period="6mo", interval="1d")
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found."})
 
-        # Ensure 'Close' column is a 1-dimensional Series using .squeeze()
+        # Ensure 'Close', 'High', 'Low' columns are 1-dimensional Series using .squeeze()
         close = data["Close"].squeeze()
+        high = data["High"].squeeze()
+        low = data["Low"].squeeze()
 
-        # Calculate EMA 20
-        ema_20 = close.ewm(span=20, adjust=False).mean()
+        # Calculate EMA 20 using ta.trend
+        ema_20 = ta.trend.ema_indicator(close, window=20, fillna=False)
 
-        # Calculate MACD
-        ema_12 = close.ewm(span=12, adjust=False).mean()
-        ema_26 = close.ewm(span=26, adjust=False).mean()
-        macd_line = ema_12 - ema_26
-        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        # Calculate MACD and MACD Signal using ta.trend
+        macd_line = ta.trend.macd(close, window_fast=12, window_slow=26, fillna=False)
+        macd_signal = ta.trend.macd_signal(close, window_fast=12, window_slow=26, window_sign=9, fillna=False)
 
-        # Calculate RSI
-        delta = close.diff()
-        gain = delta.clip(lower=0)
-        loss = -1 * delta.clip(upper=0)
-        avg_gain = gain.rolling(14).mean()
-        avg_loss = loss.rolling(14).mean()
-        rs = avg_gain / avg_loss
-        rs = rs.replace([np.inf, -np.inf], np.nan)
-        rsi = 100 - (100 / (1 + rs))
+        # Calculate Relative Strength Index (RSI) using ta.momentum
+        rsi = ta.momentum.rsi(close, window=14, fillna=False)
 
-        # Calculate Stoch RSI
+        # Calculate Stochastic RSI (maintaining original calculation logic: Stochastic of RSI)
         min_rsi = rsi.rolling(14).min()
         max_rsi = rsi.rolling(14).max()
         
@@ -209,6 +191,9 @@ def get_timeseries(ticker: str = Query(...)):
         ), index=rsi.index)
         stoch_rsi = stoch_rsi.replace([np.inf, -np.inf], np.nan)
 
+        # Calculate Average Directional Index (ADX) using ta.trend
+        adx = ta.trend.adx(high, low, close, window=14, fillna=False)
+
 
         return {
             "labels": list(data.index.strftime("%Y-%m-%d")),
@@ -218,6 +203,7 @@ def get_timeseries(ticker: str = Query(...)):
             "macd_signal": _safe_list(macd_signal), # _safe_list handles rounding and NaNs internally
             "rsi": _safe_list(rsi), # _safe_list handles rounding and NaNs internally
             "stoch_rsi": _safe_list(stoch_rsi), # _safe_list handles rounding and NaNs internally
+            "adx": _safe_list(adx) # Add ADX to the timeseries result
         }
 
     except Exception as e:
@@ -239,30 +225,27 @@ def get_combined_chart_url(ticker: str = Query(...)):
         JSONResponse: A dictionary containing the chart URL or an error message.
     """
     try:
-        # Download 3 months of daily data
-        data = yf.download(ticker, period="3mo", interval="1d")
+        # Download 6 months of daily data
+        data = yf.download(ticker, period="6mo", interval="1d")
         if data.empty:
             return JSONResponse(status_code=404, content={"error": "Invalid ticker or no data found."})
 
-        # Ensure 'Close' column is a 1-dimensional Series using .squeeze()
+        # Ensure 'Close', 'High', 'Low' columns are 1-dimensional Series using .squeeze()
         close = data["Close"].squeeze()
-        ema_20 = close.ewm(span=20, adjust=False).mean()
-        ema_12 = close.ewm(span=12, adjust=False).mean()
-        ema_26 = close.ewm(span=26, adjust=False).mean()
-        macd_line = ema_12 - ema_26
-        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        high = data["High"].squeeze()
+        low = data["Low"].squeeze()
 
-        # RSI
-        delta = close.diff()
-        gain = delta.clip(lower=0)
-        loss = -1 * delta.clip(upper=0)
-        avg_gain = gain.rolling(14).mean()
-        avg_loss = loss.rolling(14).mean()
-        rs = avg_gain / avg_loss
-        rs = rs.replace([np.inf, -np.inf], np.nan)
-        rsi = 100 - (100 / (1 + rs))
+        # Calculate EMA 20 using ta.trend
+        ema_20 = ta.trend.ema_indicator(close, window=20, fillna=False)
 
-        # Stoch RSI
+        # Calculate MACD and MACD Signal using ta.trend
+        macd_line = ta.trend.macd(close, window_fast=12, window_slow=26, fillna=False)
+        macd_signal = ta.trend.macd_signal(close, window_fast=12, window_slow=26, window_sign=9, fillna=False)
+
+        # Calculate RSI using ta.momentum
+        rsi = ta.momentum.rsi(close, window=14, fillna=False)
+
+        # Calculate Stochastic RSI (maintaining original calculation logic: Stochastic of RSI)
         min_rsi = rsi.rolling(14).min()
         max_rsi = rsi.rolling(14).max()
         
@@ -275,6 +258,9 @@ def get_combined_chart_url(ticker: str = Query(...)):
             (stoch_rsi_numerator / stoch_rsi_denominator) * 100
         ), index=rsi.index)
         stoch_rsi = stoch_rsi.replace([np.inf, -np.inf], np.nan)
+
+        # Calculate Average Directional Index (ADX) using ta.trend
+        adx = ta.trend.adx(high, low, close, window=14, fillna=False)
 
 
         labels = list(data.index.strftime("%Y-%m-%d"))
@@ -290,6 +276,7 @@ def get_combined_chart_url(ticker: str = Query(...)):
                     {"label": "MACD Signal", "data": _safe_list(macd_signal), "borderColor": "pink", "fill": False},
                     {"label": "RSI", "data": _safe_list(rsi), "borderColor": "green", "fill": False},
                     {"label": "Stoch RSI", "data": _safe_list(stoch_rsi), "borderColor": "red", "fill": False},
+                    {"label": "ADX", "data": _safe_list(adx), "borderColor": "brown", "fill": False}, # Add ADX to the chart
                 ]
             },
             "options": {
