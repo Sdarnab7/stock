@@ -3,4 +3,4 @@ uvicorn
 yfinance
 pandas
 numpy
-python.ta
+python-ta
