@@ -3,5 +3,4 @@ uvicorn
 yfinance
 pandas
 numpy
-ta.trend
-ta.momentum
+python.ta
